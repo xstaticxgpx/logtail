@@ -1,0 +1,9 @@
+# Tail arguments
+ARGS="-n0 -F"
+
+# Associative array of File = Type
+# Type is passed to zmqpush for logstash classification
+declare -A FILE_TYPE=(
+    ["/var/log/test1.log"]="type1"
+    ["/var/log/test2.log"]="type2"
+)

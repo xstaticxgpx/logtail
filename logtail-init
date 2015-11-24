@@ -1,0 +1,82 @@
+#!/bin/bash
+#
+#  Created 2015-04-16 by Gabriel_Pacuilla@cable.comcast.com
+#
+# logtail       Manage tail process(es) which pipe to zmqpush.py
+#
+# chkconfig: 2345 80 25
+# description: simple init script to maintain tail->zmqpush.py pipeline(s)
+# processname: logtail
+# config: /etc/sysconfig/logtail
+
+
+# Source function library
+if [ -f /etc/rc.d/init.d/functions ]; then
+. /etc/rc.d/init.d/functions
+elif [ -f /etc/init.d/functions ]; then
+. /etc/init.d/functions
+elif [ -f /etc/rc.d/functions ]; then
+. /etc/rc.d/functions
+fi
+
+PATH="$PATH:/usr/local/bin"
+
+_cmd=`which tail`
+_zmq=`which zmqpush.py`
+
+_cfg=/etc/sysconfig/logtail
+
+lock=/var/lock/subsys/logtail
+pidf=/var/run/logtail.pid
+
+# Should define $ARGS for tail and $FILE_TYPE associative array
+[ -f $_cfg ] && . $_cfg
+
+setpids() {
+    PID=`ps --no-heading -fC $1 | grep $2 | awk '{ print $2 }'`
+    # Put tail ($PID) and zmqpush.py ($PID+1) pids into pidfile
+    echo -e $PID"\n"$((PID+1)) >>$3
+    return 0
+}
+
+killpids() {
+    # Kill tail/zmqpush processes
+    for pid in `cat $pidf`; do
+        kill $pid
+    done
+
+    success $"$base shutdown"
+    return 0
+}
+
+case "$1" in
+  start)
+    # Start daemons.
+    for FILE in "${!FILE_TYPE[@]}"; do
+        echo -n "Starting logtail on $FILE: "
+        daemon --check=NULL "$_cmd $ARGS $FILE 2>/var/log/logtail_${FILE_TYPE[$FILE]}.debug | $_zmq ${FILE_TYPE[$FILE]} &"
+        echo
+        setpids ${_cmd##/*/} $FILE $pidf
+    done
+    touch $lock
+    ;;
+  stop)
+    # Stop daemons.
+    echo -n "Shutting down logtail: "
+    killpids
+    echo
+    rm -f $pidf $lock
+    ;;
+  restart)
+    $0 stop
+    $0 start
+    ;;
+  status)
+    status -p $pidf logtail
+    ;;
+  *)
+    echo "Usage: logtail {start|stop|restart|status}"
+    exit 1
+esac
+
+exit 0
